@@ -2,12 +2,13 @@ import socket
 import sys
 from protocol import *
 from config_logger import *
-from multiprocessing import Process
-from multiprocessing import Manager
+from multiprocessing import Process, Lock, Manager
 import time
 import argparse
 import logging
+import getpass
 import os
+from database_updater import *
 
 # logging configuration is set during argument parsing
 # logging.basicConfig(level=logging.INFO,filename='server.log',format='%(levelname)s - %(asctime)s:\t\t\t%(message)s')
@@ -25,7 +26,8 @@ class Server(object):
     3) Send data with time
     4) End connection
     """
-    def __init__(self,ip,port,vars=['a', 'b', 'c', 'time'],protocol=ConfirmationProtocolManager()):
+    def __init__(self,ip,port,database_updater_config,protocol=ConfirmationProtocolManager()):
+        """database_updater_config: (updater,login,password,base)"""
         self.ip = ip
         self.port = port
         self.sock = None
@@ -33,8 +35,13 @@ class Server(object):
         self.find_port()
         self._manager = Manager()
         self.state = self._manager.dict()
-        self.reset_state(vars)
+        table = database_updater_config[-1]
+        Server.reset_state(self.state,table.COLUMNS) #TODO substitute State
+        self.state["num_of_p"] = 0
         self.id = 0
+        self.lock = Lock()
+        p = Process(target=Server.update_database,args=(self.state,database_updater_config,self.lock))
+        p.start()
 
     def open_server_socket(self):
         # create local variables
@@ -54,7 +61,7 @@ class Server(object):
         self.sock = sock
 
     @staticmethod
-    def serve_connection(protocol,connection,state,id):
+    def serve_connection(protocol,connection,state,id,lock):
         """
         Downloads data from client
         and sends requested state variables
@@ -62,6 +69,10 @@ class Server(object):
         Static function used as target for serving processes
         """
         try:
+            lock.acquire()
+            state['num_of_p'] += 1
+            lock.release()
+
             logging.info('%d Downloading simulation results'%id)
             received_data = protocol.receive(connection)
             results = received_data["results"]
@@ -74,10 +85,20 @@ class Server(object):
 
             logging.info('%d Waiting for full state update'%id)
             while None in state.values():
+                # TIME DEPENDENCY
                 time.sleep(0.1)
 
             data_to_send = {key:val for key,val in state.items() if key in set(request)}
             data_to_send['time'] = state['time']
+
+            lock.acquire()
+            state['num_of_p'] -= 1
+            lock.release()
+
+            logging.info("{} waiting for database update".format(id))
+            while not None in state.values():
+                time.sleep(0.1) #TIME DEPENDANCY
+
             logging.info('%d Sending: %s ' % (id,data_to_send))
             protocol.sendall(connection,data_to_send)
 
@@ -86,12 +107,13 @@ class Server(object):
             logging.info("%d Closing connection",id)
             connection.close()
 
-    def reset_state(self,names=None):
+
+    @staticmethod
+    def reset_state(state,names=None):
         """
         When iteration is complete resets current state
         When names are set it initializes state
         """
-        state = self.state
         if names is None:
             for k in state.keys():
                 if k != "time":
@@ -100,13 +122,27 @@ class Server(object):
         else:
             for k in names:
                 state[k] = None
-            state['time'] = 0
+            state['time'] = 1
 
-
-    def update_database(self):
+    @staticmethod
+    def update_database(state, database_updater_config,lock):
         """Communicates with database"""
-        # TODO database
-        pass
+        db_updater_class = database_updater_config[0]
+        login = database_updater_config[1]
+        password = database_updater_config[2]
+        base = database_updater_config[3]
+        table = database_updater_config[4]
+        database_updater = db_updater_class(login,password,base)
+        while True:
+            # TIME DEPENDENCY
+            time.sleep(0.01)
+            if state['num_of_p']==0 and not (None in state.values()):
+                lock.acquire()
+                database_updater.send(state)
+                Server.reset_state(state)
+                state['num_of_p'] = 0
+                logging.info('Next iteration, time: {}'.format(state['time']))
+                lock.release()
 
     def find_port(self):
         """Finds free tcp/ip port starting from self.port"""
@@ -127,12 +163,8 @@ class Server(object):
             while True:
                 logging.info('waiting for connection')
                 connection, client_address = self.sock.accept()
-                # Check if iteration is complete
-                if not (None in self.state.values()):
-                    self.update_database()
-                    self.reset_state()
                 logging.info('connection from %s, creating separate process: %d' % (client_address,self.id))
-                p = Process(target=Server.serve_connection, args=(self.protocol,connection, self.state, self.id))
+                p = Process(target=Server.serve_connection, args=(self.protocol,connection, self.state, self.id,self.lock))
                 p.start()
                 self.id += 1
         except:
@@ -157,8 +189,20 @@ def parse_server_args():
 
 if __name__ == "__main__":
     args = parse_server_args()
+
+    print('Database configuration')
+    if 0:
+        login = input('Login: ')
+        password = getpass.getpass()
+        base = input('Database: ')
+
+        database_updater = [DatabaseUpdater, login, password, base, State] #updater,...,table
+    else:
+        database_updater = [DatabaseUpdater,'root', 'luki', 'luki_testing', State]
+
+
     configure_logger(args,logging.DEBUG)
-    server = Server(args.ip,args.port)
+    server = Server(args.ip,args.port,database_updater)
     # TODO remove f operations (debug)
     f = open("port.txt","w")
     f.write(str(server.port))

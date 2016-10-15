@@ -76,7 +76,7 @@ def parse_args():
     parser.add_argument(dest='outputfile')
     parser.add_argument('-r', '--request', dest='request', metavar='requested_variables', nargs='*')
     parser.add_argument('-f', '--file', dest='file', metavar='file_to_send')
-    parser.add_argument('-s', '--string', dest='string', metavar='string_to_send')
+    parser.add_argument('-s', '--string', dest='string', metavar='string_to_send',help="Example: -s \"{\"a\":1,\"b\":2}\"")
     parser.add_argument('-l', '--logfile', dest='logfile')
     parser.add_argument('-c', '--console', dest='console',action='store_true')
 
