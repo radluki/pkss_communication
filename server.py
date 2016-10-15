@@ -13,6 +13,8 @@ from database_updater import *
 # logging configuration is set during argument parsing
 # logging.basicConfig(level=logging.INFO,filename='server.log',format='%(levelname)s - %(asctime)s:\t\t\t%(message)s')
 
+#TODO global
+WAIT_TIME = 1e-5
 
 class Server(object):
     """
@@ -25,22 +27,39 @@ class Server(object):
     2) Receive data request
     3) Send data with time
     4) End connection
+
+    Usage:
+    1) Initialize
+    2) Start
     """
-    def __init__(self,ip,port,database_updater_config,protocol=ConfirmationProtocolManager()):
-        """database_updater_config: (updater,login,password,base)"""
+    def __init__(self, ip, port, database_updater, protocol=ConfirmationProtocolManager()):
+        """
+
+        :param ip:
+        :param port:
+        :param database_updater: object with fielsds - login,password,database,table
+        :param protocol: object with methods sendall, receive compatible with python data structures
+        """
         self.ip = ip
         self.port = port
         self.sock = None
         self.protocol = protocol
         self.find_port()
         self._manager = Manager()
-        self.state = self._manager.dict()
-        table = database_updater_config[-1]
-        Server.reset_state(self.state,table.COLUMNS) #TODO substitute State
-        self.state["num_of_p"] = 0
-        self.id = 0
+        self.state = self._manager.dict() # state shared by many processes
+        database_updater_dict = {"class":database_updater.__class__,
+                                "login":database_updater.login,\
+                                 "table":database_updater.table,\
+                                 "password":database_updater.password,\
+                                 "database":database_updater.database}
+        Server.reset_state(self.state,database_updater.table.COLUMNS)
+        self.state["num_of_p"] = 0 #number of processes dependant on state
+        # program can send data to database when all data is gathered
+        # program can increment state (reset it) when state is not needed by processes
+        # and state was sent to database
+        self.id = 0 # id of process (for logging)
         self.lock = Lock()
-        p = Process(target=Server.update_database,args=(self.state,database_updater_config,self.lock))
+        p = Process(target=Server.update_database, args=(self.state, database_updater_dict, self.lock))
         p.start()
 
     def open_server_socket(self):
@@ -85,8 +104,8 @@ class Server(object):
 
             logging.info('%d Waiting for full state update'%id)
             while None in state.values():
-                # TIME DEPENDENCY
-                time.sleep(0.1)
+                # TODO TIME DEPENDENCY
+                time.sleep(WAIT_TIME)
 
             data_to_send = {key:val for key,val in state.items() if key in set(request)}
             data_to_send['time'] = state['time']
@@ -97,7 +116,7 @@ class Server(object):
 
             logging.info("{} waiting for database update".format(id))
             while not None in state.values():
-                time.sleep(0.1) #TIME DEPENDANCY
+                time.sleep(WAIT_TIME) #TODO TIME DEPENDANCY
 
             logging.info('%d Sending: %s ' % (id,data_to_send))
             protocol.sendall(connection,data_to_send)
@@ -125,17 +144,14 @@ class Server(object):
             state['time'] = 1
 
     @staticmethod
-    def update_database(state, database_updater_config,lock):
+    def update_database(state, dbu_parts,lock):
         """Communicates with database"""
-        db_updater_class = database_updater_config[0]
-        login = database_updater_config[1]
-        password = database_updater_config[2]
-        base = database_updater_config[3]
-        table = database_updater_config[4]
-        database_updater = db_updater_class(login,password,base)
+        dbu_class = dbu_parts['class']
+        del dbu_parts['class']
+        database_updater = dbu_class(**dbu_parts)
         while True:
-            # TIME DEPENDENCY
-            time.sleep(0.01)
+            # TODO TIME DEPENDENCY
+            time.sleep(WAIT_TIME)
             if state['num_of_p']==0 and not (None in state.values()):
                 lock.acquire()
                 database_updater.send(state)
@@ -198,7 +214,7 @@ if __name__ == "__main__":
 
         database_updater = [DatabaseUpdater, login, password, base, State] #updater,...,table
     else:
-        database_updater = [DatabaseUpdater,'root', 'luki', 'luki_testing', State]
+        database_updater = DatabaseUpdater('root', 'luki', 'luki_testing', State)
 
 
     configure_logger(args,logging.DEBUG)

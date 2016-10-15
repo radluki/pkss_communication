@@ -46,6 +46,7 @@ class State(Base):
                 return False
         return True
 
+
 class DatabaseUpdater(object):
 
     def __init__(self,login,password,database,table=State):
@@ -59,6 +60,9 @@ class DatabaseUpdater(object):
         Session = sessionmaker(bind=engine)
         self.session = Session()
         self.table = table
+        self.login = login
+        self.password = password
+        self.database = database
 
     def send(self,row):
         row = {k:v for k,v in row.items() if k in self.table.COLUMNS}
@@ -69,7 +73,6 @@ class DatabaseUpdater(object):
             self.session.commit()
         except Exception as e:
             logging.error(e)
-
 
 
 if __name__ == '__main__':
