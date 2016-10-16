@@ -4,12 +4,19 @@ import argparse
 import logging
 import getpass
 import os
+import sys
 from multiprocessing import Process, Lock, Manager
 
 from protocol import ConfirmationProtocolManager
 from config_logger import configure_logger
-from database_updater import DatabaseUpdater
-from database_updater import recreate_database_updater
+from database_updater import recreate_database_updater, MODE, Mode
+
+try:
+    from database_updater import DatabaseUpdater
+    MODE = Mode.DEBUG
+except Exception as e:
+    print(e,file=sys.stderr)
+    print("Unable to import DatabaseUpdater to server")
 
 # logging configuration is set during argument parsing
 # logging.basicConfig(level=logging.INFO,filename='server.log',\
@@ -105,11 +112,11 @@ class Server(object):
 
             logging.info('%d Downloading simulation results'%os.getpid())
             received_data = protocol.receive(connection)
-            results = received_data["results"]
+            data = received_data["data"]
             request = received_data["request"]
-            logging.info('%d Received Results: %s' % (os.getpid(),results))
+            logging.info('%d Received Results: %s' % (os.getpid(),data))
             logging.info('%d Received Request: %s' % (os.getpid(), request))
-            for k,v in results.items():
+            for k,v in data.items():
                 if k in state.keys():
                     state[k] = v
 
@@ -159,7 +166,7 @@ class Server(object):
                     exit_lock.acquire()
                     enter_lock.release()
 
-                    database_updater.send(state_cp)
+                    database_updater.add(state_cp)
                     database_updater.commit()
                     logging.info('Next iteration, time: {}'.format(state[cls.TIME]))
 
@@ -186,8 +193,6 @@ class Server(object):
         self.state[self.WAIT_FOR_N] = 0
         self.state[self.WAIT_TIME] = wait_time
 
-
-
     def start(self):
         """
         Server main loop. Listens for connections
@@ -212,8 +217,12 @@ def parse_server_args():
     parser.add_argument(dest='port')
     parser.add_argument('-l', '--logfile', dest='logfile')
     parser.add_argument('-c',dest='console',action='store_true')
+    parser.add_argument('-ho',dest='host')
+
     args = parser.parse_args()
 
+    if args.host is None:
+        args.host = 'localhost'
     # args conversions
     args.port = int(args.port)
     if args.logfile is None:
@@ -226,15 +235,20 @@ if __name__ == "__main__":
     args = parse_server_args()
 
     print('Database configuration')
-    if 0:
+
+    if MODE == Mode.LOGIN:
         login = input('Login: ')
         password = getpass.getpass()
         base = input('Database: ')
 
         database_updater = DatabaseUpdater(login, password, base)
+    elif MODE == Mode.DEBUG:
+        database_updater = DatabaseUpdater('luki', 'luki', 'luki_testing',args.host)
+    elif MODE == Mode.SIMULATION:
+        from database_updater import DatabaseUpdaterSimulator
+        database_updater = DatabaseUpdaterSimulator('luki', 'luki', 'luki_testing',args.host)
     else:
-        database_updater = DatabaseUpdater('root', 'luki', 'luki_testing')
-
+        raise Exception('Unrecoginzed MODE')
 
     configure_logger(args.logfile,args.console,logging.DEBUG)
     server = Server(args.ip,args.port,database_updater)
@@ -242,6 +256,7 @@ if __name__ == "__main__":
     f = open("port.txt","w")
     f.write(str(server.port))
     f.close()
+    print("Server running on ip {} port {}".format(server.ip,server.port))
     server.start()
 
 

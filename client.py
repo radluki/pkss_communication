@@ -51,7 +51,7 @@ class Client(object):
             logging.info("Results: %s", data)
             logging.info('Request: %s', request)
             data_to_send = dict()
-            data_to_send["results"] = data
+            data_to_send["data"] = data
             data_to_send["request"] = request
             self.protocol.sendall(sock, data_to_send)
 
