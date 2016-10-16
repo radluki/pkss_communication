@@ -1,14 +1,12 @@
 import socket
-import sys
-from protocol import *
-from config_logger import *
 import json
 import logging
 import argparse
 import warnings
 
-if __name__ != "__main__":
-    logging.basicConfig(level=logging.CRITICAL, format='%(levelname)s - %(asctime)s:\t\t\t%(message)s')
+from protocol import ConfirmationProtocolManager
+from config_logger import configure_logger
+
 
 """
 Client tasks:
@@ -24,10 +22,9 @@ class Client(object):
     def __init__(self,ip,port,protocol=ConfirmationProtocolManager()):
         self.ip = ip
         self.port = port
-        self.server_sock = None
         self.protocol = protocol
 
-    def open_client_socket(self):
+    def _connect(self):
         ip = self.ip
         port = self.port
         # connection configuration
@@ -38,24 +35,24 @@ class Client(object):
         # Connection established
         return sock
 
-    def exchange_data(self,dict_to_send,list_of_request):
+    def exchange_data(self, data, request):
         """
         High level communication with server
-        :param dict_to_send: python data structure to send
-        :param list_of_request: list of requested variables
+        :param data: python data structure to send
+        :param request: list of strings, names of requested variables
         :param ip:
         :param port:
-        :return: downloaded data (requested)
+        :return: downloaded, requested data
         """
         try:
-            sock = self.open_client_socket()
+            sock = self._connect()
             # Send Results
             #print_with_trim("Sending simulation results: %s", dict_to_send,file)
-            logging.info("Results: %s", dict_to_send)
-            logging.info('Request: %s', list_of_request)
+            logging.info("Results: %s", data)
+            logging.info('Request: %s', request)
             data_to_send = dict()
-            data_to_send["results"] = dict_to_send
-            data_to_send["request"] = list_of_request
+            data_to_send["results"] = data
+            data_to_send["request"] = request
             self.protocol.sendall(sock, data_to_send)
 
             # get the response
@@ -93,14 +90,6 @@ def parse_args():
 
     return args
 
-
-def print_with_trim(strf, var, file=None, max_nol=100):
-    """max_nol - maximum number of printed letters"""
-    str1 = str(var)
-    if len(str1) > max_nol:
-        print(((strf + "...") % str1[:max_nol]), file=file)
-    else:
-        print((strf % str1), file=file)
 
 if __name__=="__main__":
     args = parse_args()

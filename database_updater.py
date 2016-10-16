@@ -1,17 +1,15 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, Float
-from sqlalchemy import ForeignKey
-from sqlalchemy.orm import relationship, backref
+from sqlalchemy import Column, Integer, Float
 import getpass
 import logging
 
 Base = declarative_base()
 
 
-
 class State(Base):
+
     __tablename__ = 'simulation_states'
 
     time = Column(Integer, primary_key=True)
@@ -55,6 +53,9 @@ class DatabaseUpdater(object):
                  'mysql+mysqlconnector://{login}:{password}@localhost/{base}'\
                  .format(login=login, base=database, password=password))
 
+        con = engine.connect()
+        con.execute('drop table simulation_states')
+
         Base.metadata.create_all(engine)
 
         Session = sessionmaker(bind=engine)
@@ -64,15 +65,29 @@ class DatabaseUpdater(object):
         self.password = password
         self.database = database
 
+
+
     def send(self,row):
         row = {k:v for k,v in row.items() if k in self.table.COLUMNS}
         table_element = self.table(row)
         logging.info('updating database with: {}'.format(table_element))
         try:
             self.session.add(table_element)
-            self.session.commit()
         except Exception as e:
             logging.error(e)
+
+    def commit(self):
+        self.session.commit()
+
+    def get_db_dict(self):
+        d = {"class":self.__class__,"table":self.table, "login":self.login, "password":self.password, "database":self.database}
+        return d
+
+
+def recreate_database_updater(db_dict):
+    d = {k:v for k,v in db_dict.items() if k!='class'}
+    db_updater = db_dict["class"](**d)
+    return db_updater
 
 
 if __name__ == '__main__':

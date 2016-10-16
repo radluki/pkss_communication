@@ -1,6 +1,7 @@
 import json
 import logging
 
+
 class ConfirmationProtocolManager(object):
 
     def __init__(self,eom='ł',cb=b'y'):
