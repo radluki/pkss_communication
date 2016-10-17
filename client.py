@@ -1,66 +1,58 @@
-import socket
+import argparse
 import json
 import logging
-import argparse
+import socket
 import warnings
 
 from protocol import ConfirmationProtocolManager
-from config_logger import configure_logger
 
-
-"""
-Client tasks:
-1) Open socket, establish connection
-2) Send calculation results
-3) Request specific data
-4) Receive the data
-"""
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.CRITICAL,filename='logs/client.log',\
+                    format='%(levelname)s - %(asctime)s:\t%(message)s')
 
 
 class Client(object):
 
     def __init__(self,ip,port,protocol=ConfirmationProtocolManager()):
+        """
+        Creates Client object
+        :param ip: server ip
+        :param port: server tcp/ip port
+        :param protocol: object that sends and receives python data structures
+        """
         self.ip = ip
         self.port = port
         self.protocol = protocol
 
     def _connect(self):
-        ip = self.ip
-        port = self.port
-        # connection configuration
+        """ Connects to server socket """
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_address = (ip,port)
-        logging.info('connecting to %s port %s' % server_address)
+        server_address = (self.ip,self.port)
+        logger.info('connecting to %s port %s' % server_address)
         sock.connect(server_address)
-        # Connection established
         return sock
 
     def exchange_data(self, data, request):
         """
         High level communication with server
         :param data: python data structure to send
-        :param request: list of strings, names of requested variables
-        :param ip:
-        :param port:
-        :return: downloaded, requested data
+        :param request: list of requested variables' names
+        :return: requested data
         """
         try:
+            # when sock was object field and server run one process in a while time was worse
             sock = self._connect()
-            # Send Results
-            #print_with_trim("Sending simulation results: %s", dict_to_send,file)
-            logging.info("Results: %s", data)
-            logging.info('Request: %s', request)
+            logger.info("Results: %s", data)
+            logger.info('Request: %s', request)
             data_to_send = dict()
             data_to_send["data"] = data
             data_to_send["request"] = request
-            self.protocol.sendall(sock, data_to_send)
+            self.protocol.send(sock, data_to_send)
 
-            # get the response
             received_data = self.protocol.receive(sock)
-            logging.info("Answer: %s", received_data)
-            #print_with_trim("received data: %s", received_data,file)
+            logger.info("Answer: %s", received_data)
         finally:
-            logging.info('closing socket')
+            logger.info('error in client\'s exchange_data')
             sock.close()
         return received_data
 
@@ -99,7 +91,6 @@ if __name__=="__main__":
     port = int(f.__next__()) # overwriting args
     args.port = port
 
-    configure_logger(args,logging.DEBUG)
     client = Client(args.ip,args.port)
     data_received = client.exchange_data(args.string,args.request)
     with open(args.outputfile,"w+") as of:

@@ -1,10 +1,11 @@
 import json
 import logging
 
+logger = logging.getLogger(__name__)
 
 class ConfirmationProtocolManager(object):
 
-    def __init__(self,eom='ł',cb=b'y'):
+    def __init__(self, eom='ł', cb=b'y'):
         """
         Creates protocol manager
         :param eom: end of message string
@@ -14,7 +15,7 @@ class ConfirmationProtocolManager(object):
         self.eom = eom
         self.cb = cb
 
-    def receive(self,connection):
+    def receive(self, connection):
         """
         Downloads message ending with eom sign
         bytes -> string -> python data structure
@@ -31,25 +32,25 @@ class ConfirmationProtocolManager(object):
                 # decoding will raise exception
                 last_sign = whole_message[-self.eom_byte_len:].decode("utf-8")
             except Exception as e:
-                logging.error(e)
+                logger.error(e)
                 continue
             if last_sign[-len(self.eom):] == self.eom:
                 whole_message = whole_message.decode("utf-8")
                 whole_message = whole_message[:-len(self.eom)]
-                connection.send(self.cb) #confirmation
+                connection.send(self.cb)   #confirmation
                 data = json.loads(whole_message)
                 return data
 
-    def sendall(self,sock, data_structure):
+    def send(self, sock, data_structure):
         """
         Sends data stucture with eom end of message,
         waits for confirmation byte
         """
         data_to_send = json.dumps(data_structure) + self.eom
         data_to_send_utf = data_to_send.encode("utf-8")
-        sock.sendall(data_to_send_utf)
+        sock.send(data_to_send_utf)
         b = sock.recv(1)
-        if b!=self.cb:
+        if b != self.cb:
             raise Exception('Confirmation byte is incorrect')
 
 

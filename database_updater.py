@@ -1,14 +1,25 @@
 import getpass
 import logging
 import sys
+from abc import ABCMeta
 
-from enum import Enum
+logger = logging.getLogger(__name__)
 
 
-class Mode(Enum):
-    LOGIN = 1
-    DEBUG = 2
-    SIMULATION = 3
+class DBUpdater(metaclass=ABCMeta):
+
+    def get_db_dict(self):
+        """Along with recreate_database_updater function allows for object recreation in another process"""
+        d = {"class": self.__class__, "table": self.table, "login": self.login, \
+             "password": self.password, "database": self.database, "host": self.host}
+        return d
+
+    def recreate_database_updater(db_dict):
+        """Allows for recreation"""
+        d = {k:v for k,v in db_dict.items() if k!='class'}
+        db_updater = db_dict["class"](**d)
+        return db_updater
+
 
 try:
 
@@ -25,10 +36,9 @@ try:
 
     Base = declarative_base()
 
-    MODE = Mode.DEBUG
 
     class State(Base):
-
+        """ Class represents table in MySQL"""
         __tablename__ = 'simulation_states'
 
         time = Column(Integer, primary_key=True)
@@ -64,7 +74,7 @@ try:
             return True
 
 
-    class DatabaseUpdater(object):
+    class DatabaseUpdater(DBUpdater):
 
         def __init__(self,login,password,database,host='localhost',table=State):
             engine = create_engine(\
@@ -72,7 +82,10 @@ try:
                      .format(login=login, base=database, password=password, host=host))
 
             con = engine.connect()
-            con.execute('drop table simulation_states')
+            try:
+                con.execute('drop table simulation_states')
+            except:
+                print("simulation_testing do not exist")
 
             Base.metadata.create_all(engine)
 
@@ -85,20 +98,20 @@ try:
             self.host = host
 
         def add(self, row):
+            """Adds row (i.e. State object) to table buffer (associated with State)"""
             row = {k:v for k,v in row.items() if k in self.table.COLUMNS}
             table_element = self.table(row)
-            logging.info('updating database with: {}'.format(table_element))
+            logger.info('updating database with: {}'.format(table_element))
             try:
                 self.session.add(table_element)
             except Exception as e:
-                logging.error(e)
+                logger.error(e)
 
         def commit(self):
+            """Sends data from buffer to database"""
             self.session.commit()
 
-        def get_db_dict(self):
-            d = {"class":self.__class__,"table":self.table, "login":self.login, "password":self.password, "database":self.database}
-            return d
+
 
 
     if __name__ == '__main__':
@@ -124,12 +137,11 @@ except Exception as e:
     print(e,file=sys.stderr)
     print("Available only DatabaseUpdaterSimulator")
     print("Set MODE to Mode.SIMULATION")
-    MODE = Mode.SIMULATION
 
 finally:
 
-    class DatabaseUpdaterSimulator(object):
-
+    class DatabaseUpdaterSimulator(DBUpdater):
+        """Class created for debugging purposes, no database connection needed"""
         class StateSimulator(object):
 
             COLUMNS = {'time', 'Tzm', 'Fzm', 'To', 'Tpco', 'Fzco', 'Tpm', 'Tzco', 'Tr'}
@@ -139,9 +151,8 @@ finally:
                     if k in dir(State):
                         self.__dict__[k] = v
 
-
         def __init__(self,login,password,database,host='localhost',table=StateSimulator):
-            logging.info("Creating database updater")
+            logger.info("Creating database updater")
             self.table = table
             self.login = login
             self.password = password
@@ -149,21 +160,14 @@ finally:
             self.host = host
 
         def add(self,row):
-            logging.info("Adding {} to buffer".format(row))
+            logger.info("Adding {} to buffer".format(row))
 
         def commit(self):
-            logging.info("Commiting data to database")
-
-        def get_db_dict(self):
-            d = {"class":self.__class__,"table":self.table, "login":self.login,\
-                 "password":self.password, "database":self.database, "host":self.host}
-            return d
+            logger.info("Commiting data to database")
 
 
-    def recreate_database_updater(db_dict):
-        d = {k:v for k,v in db_dict.items() if k!='class'}
-        db_updater = db_dict["class"](**d)
-        return db_updater
+
+
 
 
 
