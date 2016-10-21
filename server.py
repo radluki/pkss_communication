@@ -11,8 +11,14 @@ from enum import Enum
 from protocol import ConfirmationProtocolManager
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.CRITICAL,filename='logs/server.log',\
+logging.basicConfig(level=logging.DEBUG,filename='server.log',\
                     format='%(levelname)s - %(asctime)s:\t%(message)s')
+
+"""
+For debugging purposes clients do not need to have
+installed sqlalchemy. MODE is automatically set to SIMULATION
+and appropriate class DatabaseUpdaterSimulator is used
+"""
 
 
 class Mode(Enum):
@@ -25,9 +31,12 @@ try:
     from database_updater import DatabaseUpdater
     MODE = Mode.DEBUG
 except Exception as e:
-    from database_updater import DatabaseUpdaterSimulator
+    from database_updater_simulator import DatabaseUpdaterSimulator
+    MODE = Mode.SIMULATION
     print(e,file=sys.stderr)
-    print("Unable to import DatabaseUpdater to server")
+    print("Unable to import DatabaseUpdater to server",file=sys.stderr)
+    print("Simulation mode is set",file=sys.stderr)
+    print("All database operation will be simulated by module DatabaseUpdaterSimulator",file=sys.stderr)
 
 
 class Server(object):
@@ -41,10 +50,10 @@ class Server(object):
     WAIT_TIME = "WAIT_TIME"
     TIME = "time"
     #TODO change this
-    DB_UPDATE_TIME = 2 #sek
-    CONFIG_STATES = {WAIT_FOR_N, WAIT_TIME, TIME}
+    DB_UPDATE_TIME = "DB_UPDATE_TIME" #sek
+    CONFIG_STATES = {WAIT_FOR_N, WAIT_TIME, TIME, DB_UPDATE_TIME}
 
-    def __init__(self, ip, port, db_updater, wait_time=1e-5, protocol=ConfirmationProtocolManager()):
+    def __init__(self, ip, port, db_updater,db_update_time=1, wait_time=1e-5, protocol=ConfirmationProtocolManager()):
         """
         :param ip: phisical ip address of host machine
         :param port: indicates where to start searching for free tcp/ip port
@@ -62,7 +71,7 @@ class Server(object):
 
         self._manager = Manager()
         self.state = self._manager.dict() # state shared by many processes
-        self.initialize_state(db_updater.table.COLUMNS,wait_time)
+        self.initialize_state(db_updater.table.COLUMNS,wait_time,db_update_time)
         # program can send data to database and reset it
         # when all data is gathered and serving processes do not need current state any more
 
@@ -156,7 +165,7 @@ class Server(object):
             exit_lock.acquire()
             t = time.time()
             while True:
-                if time.time() - t > cls.DB_UPDATE_TIME:
+                if time.time() - t > state[cls.DB_UPDATE_TIME]:
                     t = time.time()
                     database_updater.commit()
                 if not (None in state.values()): # state gathered
@@ -187,13 +196,14 @@ class Server(object):
                 state[k] = None
         state[cls.TIME] += 1
 
-    def initialize_state(self,names,wait_time):
+    def initialize_state(self,names,wait_time,db_update_time):
         for k in names:
             if k not in self.CONFIG_STATES:
                 self.state[k] = None
         self.state[self.TIME] = int(1)
         self.state[self.WAIT_FOR_N] = 0
         self.state[self.WAIT_TIME] = wait_time
+        self.state[self.DB_UPDATE_TIME] = db_update_time
 
     def start(self):
         """
@@ -214,40 +224,34 @@ class Server(object):
 
 
 def parse_server_args():
-    parser = argparse.ArgumentParser(description="Sets up server app")
-    parser.add_argument(dest='ip')
-    parser.add_argument(dest='port')
-    parser.add_argument('-l', '--logfile', dest='logfile')
-    parser.add_argument('-c',dest='console',action='store_true')
-    parser.add_argument('-ho',dest='host')
+    parser = argparse.ArgumentParser(description="To set up server app required is ip address")
+    parser.add_argument('-ip',dest='ip',help='server phisical ip address')
+    parser.add_argument('--port',dest='port',help='server phisical tcp port')
 
     args = parser.parse_args()
-
-    if args.host is None:
-        args.host = 'localhost'
-    # args conversions
-    args.port = int(args.port)
-    if args.logfile is None:
-        args.logfile = "server.log"
+    if args.ip is None:
+        args.ip = '127.0.0.1'
+    if args.port is None:
+        args.port = 10000
+    else:
+        args.port = int(args.port) # parsed as string
 
     return args
 
 
 if __name__ == "__main__":
     args = parse_server_args()
-    print('Database configuration')
-
     if MODE == Mode.LOGIN:
+        print('Database configuration')
+        host = input('Database host: ')
+        base = input('Database: ')
         login = input('Login: ')
         password = getpass.getpass()
-        base = input('Database: ')
-
-        database_updater = DatabaseUpdater(login, password, base)
+        database_updater = DatabaseUpdater(login, password, base, host)
     elif MODE == Mode.DEBUG:
-        database_updater = DatabaseUpdater('luki', 'luki', 'luki_testing',args.host)
+        database_updater = DatabaseUpdater('luki', 'luki', 'luki_testing','192.168.43.198')
     elif MODE == Mode.SIMULATION:
-        from database_updater import DatabaseUpdaterSimulator
-        database_updater = DatabaseUpdaterSimulator('luki', 'luki', 'luki_testing',args.host)
+        database_updater = DatabaseUpdaterSimulator('luki', 'luki', 'luki_testing','localhost')
     else:
         raise Exception('Unrecoginzed MODE')
 
@@ -256,7 +260,7 @@ if __name__ == "__main__":
     f = open("port.txt","w")
     f.write(str(server.port))
     f.close()
-    print("Server running on ip {} port {}".format(server.ip,server.port))
+    print("Starting server on ip {} port {}".format(server.ip,server.port))
     server.start()
 
 
