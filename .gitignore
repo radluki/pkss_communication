@@ -1,3 +1,28 @@
+##################
+# LUKASZ
+##################
+test_sql.py
+port.txt
+iofiles/*
+.gitignore
+.idea/*
+__pycache__/
+database/*
+xtest_case_1
+xtest_case_1.py
+test_case_1/output/
+controller.py
+test_of_language
+deprecated
+others
+logs
+server.log
+*.log
+
+#################
+# END LUKASZ
+#################
+
 #################
 ## Eclipse
 #################

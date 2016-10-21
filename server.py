@@ -11,8 +11,6 @@ from enum import Enum
 from protocol import ConfirmationProtocolManager
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG,filename='server.log',\
-                    format='%(levelname)s - %(asctime)s:\t%(message)s')
 
 """
 For debugging purposes clients do not need to have
@@ -39,6 +37,10 @@ except Exception as e:
     print("All database operation will be simulated by module DatabaseUpdaterSimulator",file=sys.stderr)
 
 
+logging.basicConfig(level=logging.DEBUG,filename='server.log',\
+                    format='%(levelname)s - %(asctime)s:\t%(message)s')
+
+
 class Server(object):
     """
     Server gathers state variables from client apps
@@ -49,7 +51,6 @@ class Server(object):
     WAIT_FOR_N = "WAIT_FOR_N"
     WAIT_TIME = "WAIT_TIME"
     TIME = "time"
-    #TODO change this
     DB_UPDATE_TIME = "DB_UPDATE_TIME" #sek
     CONFIG_STATES = {WAIT_FOR_N, WAIT_TIME, TIME, DB_UPDATE_TIME}
 
@@ -227,6 +228,8 @@ def parse_server_args():
     parser = argparse.ArgumentParser(description="To set up server app required is ip address")
     parser.add_argument('-ip',dest='ip',help='server phisical ip address')
     parser.add_argument('--port',dest='port',help='server phisical tcp port')
+    parser.add_argument('--login',dest='login',action='store_true',\
+                        help='Configure database manually, if not set default(debugging) settings are used')
 
     args = parser.parse_args()
     if args.ip is None:
@@ -241,6 +244,8 @@ def parse_server_args():
 
 if __name__ == "__main__":
     args = parse_server_args()
+    if args.login and MODE!=Mode.SIMULATION:
+        MODE = Mode.LOGIN
     if MODE == Mode.LOGIN:
         print('Database configuration')
         host = input('Database host: ')

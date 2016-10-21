@@ -4,7 +4,7 @@ from database_updater_interface import DBUpdater
 
 logger = logging.getLogger(__name__)
 
-import hdjsld
+#import hdjsld
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
