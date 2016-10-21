@@ -39,7 +39,7 @@ if __name__ == '__main__':
     print("Starting tester")
 
     t = time.time()
-    n = 300
+    n = 30
     for i in range(int(n)):
         ind = i%2
         not_ind = (i+1)%2

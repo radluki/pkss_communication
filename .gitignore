@@ -32,6 +32,7 @@ server.log
 .metadata
 bin/
 tmp/
+*.txt
 *.tmp
 *.bak
 *.swp
