@@ -38,4 +38,4 @@ if __name__=="__main__":
     data_received = client.exchange_data(args.string,args.request)
     with open(args.outputfile,"w+") as of:
         json.dump(data_received,of)
-    print(data_received)
+    print(json.dumps(data_received))

@@ -46,10 +46,10 @@ if __name__ == '__main__':
         d[ind] = inc_dict(d[ind])
         d2s = {"request":list(d[not_ind].keys()),"results":d[ind]}
         d[not_ind] = c.exchange_data(d2s["results"],d2s["request"])
-        print(d[not_ind]["time"])
+        print(d[not_ind])
         del d[not_ind]["time"]
 
-    t = time.time() -t
+    t = time.time() - t
     print("Sent {} dicts in {} s".format(n,t))
 
 
